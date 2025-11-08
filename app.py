@@ -19,9 +19,6 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
-# DBがなければ作成（gunicorn でも動くように）
-with app.app_context():
-    db.create_all()
 
 # ---------- Model ----------
 class Booking(db.Model):
@@ -50,6 +47,13 @@ class Booking(db.Model):
         if value and ("@" not in value or "." not in value):
             raise ValueError("メール形式が不正です")
         return value
+
+# --- Bookingモデル定義の直後に追加/移動 ---
+with app.app_context():
+    db.create_all()
+    print("DB ready at", DB_PATH)
+# -----------------------------------------
+
 
 # ---------- Estimate Logic ----------
 SERVICE_PRICE_TABLE = {
