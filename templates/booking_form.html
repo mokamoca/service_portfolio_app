@@ -1,35 +1,70 @@
 {% extends 'base.html' %}
 {% block content %}
+
+{% set fd = form_data or {} %}
+{% set errs = errors or {} %}
+
 <h1 class="text-2xl font-semibold mb-4">サービス予約・見積</h1>
 
 <form method="post" action="{{ url_for('book') }}" class="grid gap-4 md:grid-cols-2 bg-white p-4 rounded-xl shadow">
 
   <div class="md:col-span-2 grid gap-3 md:grid-cols-3">
-    <label class="block">お名前*<input name="name" required class="mt-1 w-full border rounded p-2"></label>
-    <label class="block">電話番号*<input name="phone" required class="mt-1 w-full border rounded p-2"></label>
-    <label class="block">メール<input name="email" type="email" class="mt-1 w-full border rounded p-2"></label>
+
+    <label class="block">お名前*
+      <input name="name"
+             value="{{ fd.get('name','') }}"
+             required maxlength="120"
+             class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('name') }}">
+      {% if errs.get('name') %}<p class="text-red-600 text-sm mt-1">{{ errs['name'] }}</p>{% endif %}
+    </label>
+
+    <label class="block">電話番号*
+      <input name="phone" type="tel" inputmode="tel"
+             value="{{ fd.get('phone','') }}"
+             pattern="[0-9+\-() ]{9,16}" required
+             title="数字・+ - () とスペースのみ、9〜16桁"
+             class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('phone') }}">
+      {% if errs.get('phone') %}<p class="text-red-600 text-sm mt-1">{{ errs['phone'] }}</p>{% endif %}
+    </label>
+
+    <label class="block">メール
+      <input name="email" type="email"
+             value="{{ fd.get('email','') }}"
+             maxlength="200"
+             class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('email') }}">
+      {% if errs.get('email') %}<p class="text-red-600 text-sm mt-1">{{ errs['email'] }}</p>{% endif %}
+    </label>
+
   </div>
 
   <label class="block">サービス種別*
     <select name="service_type"
-            class="mt-1 w-full border rounded p-2"
+            class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('service_type') }}"
             hx-post="{{ url_for('estimate') }}"
             hx-target="#estimate-box"
             hx-trigger="change from:closest form"
             required>
       <option value="">選択してください</option>
-      <option value="grave_cleaning">お墓掃除代行</option>
-      <option value="appliance_setup">家電設置・設定</option>
-      <option value="errand">買い物・各種代行</option>
+      <option value="grave_cleaning" {{ 'selected' if fd.get('service_type')=='grave_cleaning' }}>お墓掃除代行</option>
+      <option value="appliance_setup" {{ 'selected' if fd.get('service_type')=='appliance_setup' }}>家電設置・設定</option>
+      <option value="errand" {{ 'selected' if fd.get('service_type')=='errand' }}>買い物・各種代行</option>
     </select>
+    {% if errs.get('service_type') %}<p class="text-red-600 text-sm mt-1">{{ errs['service_type'] }}</p>{% endif %}
   </label>
 
   <label class="block">住所・場所*
-    <input name="location" required class="mt-1 w-full border rounded p-2" placeholder="例：兵庫県小野市…">
+    <input name="location"
+           value="{{ fd.get('location','') }}"
+           required maxlength="300"
+           class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('location') }}">
+    {% if errs.get('location') %}<p class="text-red-600 text-sm mt-1">{{ errs['location'] }}</p>{% endif %}
   </label>
 
   <label class="block">希望日
-    <input name="preferred_date" type="date" class="mt-1 w-full border rounded p-2">
+    <input name="preferred_date" type="date"
+           value="{{ fd.get('preferred_date','') }}"
+           class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('preferred_date') }}">
+    {% if errs.get('preferred_date') %}<p class="text-red-600 text-sm mt-1">{{ errs['preferred_date'] }}</p>{% endif %}
   </label>
 
   <div class="md:col-span-2 border rounded p-3">
@@ -37,15 +72,20 @@
       <input id="opt_photo"
              name="options_photoreport"
              type="checkbox"
+             {% if fd.get('options_photoreport') %}checked{% endif %}
              hx-post="{{ url_for('estimate') }}"
              hx-target="#estimate-box"
              hx-trigger="change from:closest form" />
       <label for="opt_photo">写真レポート（+¥{{ photo_option_price }}）</label>
     </div>
-    <textarea name="message" class="mt-2 w-full border rounded p-2" rows="3" placeholder="ご要望や詳細"></textarea>
+    <textarea name="message" maxlength="500"
+              class="mt-2 w-full border rounded p-2 {{ 'border-red-500' if errs.get('message') }}"
+              rows="3" placeholder="ご要望や詳細">{{ fd.get('message','') }}</textarea>
+    {% if errs.get('message') %}<p class="text-red-600 text-sm mt-1">{{ errs['message'] }}</p>{% endif %}
   </div>
 
   <div id="estimate-box" class="md:col-span-2">
+    {# 価格はサーバから渡されたpriceを使う #}
     {% include '_estimate_fragment.html' %}
   </div>
 
@@ -53,4 +93,5 @@
     <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:opacity-90">この内容で予約を送信</button>
   </div>
 </form>
+
 {% endblock %}

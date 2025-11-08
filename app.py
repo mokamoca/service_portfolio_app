@@ -10,6 +10,10 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import validates
 
+import re
+from datetime import date
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "app.db")
 
@@ -71,6 +75,68 @@ def calc_estimate(service_type: str, options: dict) -> int:
     extra = OPTION_PRICE["photoreport"] if options.get("photoreport") else 0
     return base + extra
 
+# ---------- Validation ----------
+import re
+from datetime import date
+
+ALLOWED_SERVICE_TYPES = set(SERVICE_PRICE_TABLE.keys())
+PHONE_RE = re.compile(r"^[0-9+\-() ]{9,16}$")
+
+def validate_and_clean(form):
+    """フォーム値を整形しつつ検証し、(cleaned_data, errors) を返す"""
+    # 1) まず整形（stripや型変換）
+    data = {
+        "name": (form.get("name") or "").strip(),
+        "email": (form.get("email") or "").strip(),
+        "phone": (form.get("phone") or "").strip(),
+        "service_type": form.get("service_type") or "",
+        "location": (form.get("location") or "").strip(),
+        "preferred_date": form.get("preferred_date") or "",
+        "options_photoreport": (form.get("options_photoreport") == "on"),
+        "message": (form.get("message") or "").strip(),
+    }
+    errors = {}
+
+    # 2) 必須
+    for key in ["name", "phone", "service_type", "location"]:
+        if not data[key]:
+            errors[key] = "必須項目です"
+
+    # 3) サービス種別
+    if data["service_type"] and data["service_type"] not in ALLOWED_SERVICE_TYPES:
+        errors["service_type"] = "不正な選択です"
+
+    # 4) 電話番号
+    if data["phone"] and not PHONE_RE.match(data["phone"]):
+        errors["phone"] = "数字・+ - () とスペースのみ、9〜16桁で入力してください"
+
+    # 5) メール（任意）
+    if data["email"] and ("@" not in data["email"] or "." not in data["email"] or len(data["email"]) > 200):
+        errors["email"] = "メール形式が不正です"
+
+    # 6) 文字数
+    if len(data["name"]) > 120:
+        errors["name"] = "120文字以内で入力してください"
+    if len(data["location"]) > 300:
+        errors["location"] = "300文字以内で入力してください"
+    if len(data["message"]) > 500:
+        errors["message"] = "500文字以内で入力してください"
+
+    # 7) 日付（任意）：過去不可、半年先まで
+    if data["preferred_date"]:
+        try:
+            d = datetime.strptime(data["preferred_date"], "%Y-%m-%d").date()
+        except ValueError:
+            errors["preferred_date"] = "日付の形式が不正です"
+        else:
+            if d < date.today():
+                errors["preferred_date"] = "過去の日付は選べません"
+            elif (d - date.today()).days > 180:
+                errors["preferred_date"] = "半年より先の予約はできません"
+
+    return data, errors
+
+
 # ---------- Basic Auth (Admin) ----------
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "changeme")
@@ -101,59 +167,63 @@ def inject_globals():
 @app.route("/")
 def index():
     return render_template(
-    "booking_form.html",
-    service_price_table=SERVICE_PRICE_TABLE,
-    photo_option_price=OPTION_PRICE["photoreport"],
-)
-
+        "booking_form.html",
+        service_price_table=SERVICE_PRICE_TABLE,
+        photo_option_price=OPTION_PRICE["photoreport"],
+        form_data={},        # ← 追加
+        errors={},           # ← 追加
+        price=0,             # ← 初期の概算価格
+    )
 
 @app.route("/estimate", methods=["POST"])
 def estimate():
     service_type = request.form.get("service_type")
     photoreport = request.form.get("options_photoreport") == "on"
+    # 不正 service_type は 0 で返す（安全化）
+    if service_type not in SERVICE_PRICE_TABLE:
+        return render_template("_estimate_fragment.html", price=0)
     price = calc_estimate(service_type, {"photoreport": photoreport})
     return render_template("_estimate_fragment.html", price=price)
 
 @app.route("/book", methods=["POST"])
 def book():
-    try:
-        name = (request.form.get("name") or "").strip()
-        email = (request.form.get("email") or "").strip() or None
-        phone = (request.form.get("phone") or "").strip()
-        service_type = request.form.get("service_type")
-        location = (request.form.get("location") or "").strip()
-        preferred_date_raw = request.form.get("preferred_date")
-        preferred_date = (
-            datetime.strptime(preferred_date_raw, "%Y-%m-%d").date()
-            if preferred_date_raw else None
-        )
-        options_photoreport = request.form.get("options_photoreport") == "on"
-        message = (request.form.get("message") or "").strip() or None
+    data, errors = validate_and_clean(request.form)
+    if errors:
+        # 入力値を保持したまま、その場で再描画（400を返すとブラウザもエラー扱いするが問題なし）
+        price = calc_estimate(
+            data["service_type"], {"photoreport": data["options_photoreport"]}
+        ) if data["service_type"] in SERVICE_PRICE_TABLE else 0
+        return render_template(
+            "booking_form.html",
+            service_price_table=SERVICE_PRICE_TABLE,
+            photo_option_price=OPTION_PRICE["photoreport"],
+            form_data=data,
+            errors=errors,
+            price=price,
+        ), 400
 
-        est_price = calc_estimate(service_type, {"photoreport": options_photoreport})
+    # ここからは保存（サーバ側で価格を再計算）
+    preferred_date = (
+        datetime.strptime(data["preferred_date"], "%Y-%m-%d").date()
+        if data["preferred_date"] else None
+    )
+    est_price = calc_estimate(data["service_type"], {"photoreport": data["options_photoreport"]})
 
-        if not name or not phone or not service_type or not location:
-            flash("必須項目が未入力です", "error")
-            return redirect(url_for("index"))
+    b = Booking(
+        name=data["name"],
+        email=(data["email"] or None),
+        phone=data["phone"],
+        service_type=data["service_type"],
+        location=data["location"],
+        preferred_date=preferred_date,
+        options_photoreport=data["options_photoreport"],
+        message=(data["message"] or None),
+        est_price=est_price,
+    )
+    db.session.add(b)
+    db.session.commit()
+    return render_template("thanks.html", booking=b)
 
-        b = Booking(
-            name=name,
-            email=email,
-            phone=phone,
-            service_type=service_type,
-            location=location,
-            preferred_date=preferred_date,
-            options_photoreport=options_photoreport,
-            message=message,
-            est_price=est_price,
-        )
-        db.session.add(b)
-        db.session.commit()
-        return render_template("thanks.html", booking=b)
-    except Exception as e:
-        app.logger.exception(e)
-        flash(f"保存時にエラー: {e}", "error")
-        return redirect(url_for("index"))
 
 # ---------- Admin ----------
 from sqlalchemy import or_
