@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">案件一覧</h1>
+<form method="get" class="mb-3 flex gap-2">
+<input class="border rounded p-2" name="q" value="{{ q }}" placeholder="検索（名前/電話/場所）">
+<select name="status" class="border rounded p-2">
+<option value="">すべて</option>
+{% for s in ['new','confirmed','done','canceled'] %}
+<option value="{{s}}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+{% endfor %}
+</select>
+<button class="px-3 rounded bg-slate-900 text-white">検索</button>
+<a class="px-3 rounded border" href="{{ url_for('admin_export_csv') }}">CSVエクスポート</a>
+</form>
+
+
+<div class="overflow-x-auto bg-white rounded-xl shadow">
+<table class="min-w-full text-sm">
+<thead class="bg-slate-100">
+<tr>
+<th class="p-2 text-left">ID</th>
+<th class="p-2 text-left">日時</th>
+<th class="p-2 text-left">名前</th>
+<th class="p-2 text-left">電話</th>
+<th class="p-2 text-left">サービス</th>
+<th class="p-2 text-left">住所/場所</th>
+<th class="p-2 text-left">見積</th>
+<th class="p-2 text-left">状態</th>
+</tr>
+</thead>
+<tbody>
+{% for b in bookings %}
+<tr class="border-t hover:bg-slate-50">
+<td class="p-2"><a class="underline" href="{{ url_for('admin_detail', booking_id=b.id) }}">#{{ b.id }}</a></td>
+<td class="p-2">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+<td class="p-2">{{ b.name }}</td>
+<td class="p-2">{{ b.phone }}</td>
+<td class="p-2">{{ b.service_type }}</td>
+<td class="p-2">{{ b.location }}</td>
+<td class="p-2">¥{{ b.est_price }}</td>
+<td class="p-2">{{ b.status }}</td>
+</tr>
+{% else %}
+<tr><td class="p-3" colspan="8">データがありません</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

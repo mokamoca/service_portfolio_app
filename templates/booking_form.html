@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">サービス予約・見積</h1>
+
+<form method="post" action="{{ url_for('book') }}" class="grid gap-4 md:grid-cols-2 bg-white p-4 rounded-xl shadow">
+
+  <div class="md:col-span-2 grid gap-3 md:grid-cols-3">
+    <label class="block">お名前*<input name="name" required class="mt-1 w-full border rounded p-2"></label>
+    <label class="block">電話番号*<input name="phone" required class="mt-1 w-full border rounded p-2"></label>
+    <label class="block">メール<input name="email" type="email" class="mt-1 w-full border rounded p-2"></label>
+  </div>
+
+  <label class="block">サービス種別*
+    <select name="service_type"
+            class="mt-1 w-full border rounded p-2"
+            hx-post="{{ url_for('estimate') }}"
+            hx-target="#estimate-box"
+            hx-trigger="change from:closest form"
+            required>
+      <option value="">選択してください</option>
+      <option value="grave_cleaning">お墓掃除代行</option>
+      <option value="appliance_setup">家電設置・設定</option>
+      <option value="errand">買い物・各種代行</option>
+    </select>
+  </label>
+
+  <label class="block">住所・場所*
+    <input name="location" required class="mt-1 w-full border rounded p-2" placeholder="例：兵庫県小野市…">
+  </label>
+
+  <label class="block">希望日
+    <input name="preferred_date" type="date" class="mt-1 w-full border rounded p-2">
+  </label>
+
+  <div class="md:col-span-2 border rounded p-3">
+    <div class="flex items-center gap-2">
+      <input id="opt_photo"
+             name="options_photoreport"
+             type="checkbox"
+             hx-post="{{ url_for('estimate') }}"
+             hx-target="#estimate-box"
+             hx-trigger="change from:closest form" />
+      <label for="opt_photo">写真レポート（+¥{{ photo_option_price }}）</label>
+    </div>
+    <textarea name="message" class="mt-2 w-full border rounded p-2" rows="3" placeholder="ご要望や詳細"></textarea>
+  </div>
+
+  <div id="estimate-box" class="md:col-span-2">
+    {% include '_estimate_fragment.html' %}
+  </div>
+
+  <div class="md:col-span-2">
+    <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:opacity-90">この内容で予約を送信</button>
+  </div>
+</form>
+{% endblock %}

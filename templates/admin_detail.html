@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">案件 #{{ b.id }}</h1>
+<div class="grid md:grid-cols-3 gap-4">
+<div class="md:col-span-2 bg-white rounded-xl shadow p-4">
+<dl class="grid grid-cols-3 gap-2 text-sm">
+<dt class="text-slate-500">受付日時</dt><dd class="col-span-2">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }}</dd>
+<dt class="text-slate-500">名前</dt><dd class="col-span-2">{{ b.name }}</dd>
+<dt class="text-slate-500">電話</dt><dd class="col-span-2">{{ b.phone }}</dd>
+<dt class="text-slate-500">メール</dt><dd class="col-span-2">{{ b.email or '—' }}</dd>
+<dt class="text-slate-500">サービス</dt><dd class="col-span-2">{{ b.service_type }}</dd>
+<dt class="text-slate-500">住所/場所</dt><dd class="col-span-2">{{ b.location }}</dd>
+<dt class="text-slate-500">希望日</dt><dd class="col-span-2">{{ b.preferred_date or '—' }}</dd>
+<dt class="text-slate-500">写真レポ</dt><dd class="col-span-2">{{ 'あり' if b.options_photoreport else 'なし' }}</dd>
+<dt class="text-slate-500">概算見積</dt><dd class="col-span-2">¥{{ b.est_price }}</dd>
+<dt class="text-slate-500">メモ</dt><dd class="col-span-2 whitespace-pre-line">{{ b.message or '—' }}</dd>
+</dl>
+</div>
+<div class="bg-white rounded-xl shadow p-4">
+<form method="post" action="{{ url_for('admin_update', booking_id=b.id) }}" class="grid gap-2">
+<label class="block text-sm">状態
+<select name="status" class="mt-1 w-full border rounded p-2">
+{% for s in ['new','confirmed','done','canceled'] %}
+<option value="{{s}}" {% if b.status==s %}selected{% endif %}>{{ s }}</option>
+{% endfor %}
+</select>
+</label>
+<label class="block text-sm">管理メモ
+<textarea name="admin_note" rows="6" class="mt-1 w-full border rounded p-2">{{ b.admin_note or '' }}</textarea>
+</label>
+<button class="px-3 py-2 rounded bg-slate-900 text-white">更新</button>
+</form>
+</div>
+</div>
+{% endblock %}
