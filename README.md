@@ -9,8 +9,11 @@ Flask + SQLite + HTMX + Tailwind 構成で構築した予約・見積り・案�
 
 **Demo**
 👉 https://service-portfolio-app.onrender.com
-管理画面: `/admin`  
-（ユーザー: admin / パスワード: changeme）
+
+### 管理画面
+- パス: `/admin`
+- Basic 認証のユーザー名/パスワードは環境変数 `ADMIN_USER`, `ADMIN_PASS` で設定
+
 
 **Tech Stack**
 - Flask / SQLAlchemy / HTMX / Tailwind
