@@ -19,6 +19,9 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+# DBがなければ作成（gunicorn でも動くように）
+with app.app_context():
+    db.create_all()
 
 # ---------- Model ----------
 class Booking(db.Model):
