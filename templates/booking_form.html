@@ -1,97 +1,155 @@
 {% extends 'base.html' %}
 {% block content %}
-
-{% set fd = form_data or {} %}
-{% set errs = errors or {} %}
-
-<h1 class="text-2xl font-semibold mb-4">サービス予約・見積</h1>
-
-<form method="post" action="{{ url_for('book') }}" class="grid gap-4 md:grid-cols-2 bg-white p-4 rounded-xl shadow">
-
-  <div class="md:col-span-2 grid gap-3 md:grid-cols-3">
-
-    <label class="block">お名前*
-      <input name="name"
-             value="{{ fd.get('name','') }}"
-             required maxlength="120"
-             class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('name') }}">
-      {% if errs.get('name') %}<p class="text-red-600 text-sm mt-1">{{ errs['name'] }}</p>{% endif %}
-    </label>
-
-    <label class="block">電話番号*
-      <input name="phone" type="tel" inputmode="tel"
-             value="{{ fd.get('phone','') }}"
-             pattern="[0-9+\-() ]{9,16}" required
-             title="数字・+ - () とスペースのみ、9〜16桁"
-             class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('phone') }}">
-      {% if errs.get('phone') %}<p class="text-red-600 text-sm mt-1">{{ errs['phone'] }}</p>{% endif %}
-    </label>
-
-    <label class="block">メール
-      <input name="email" type="email"
-             value="{{ fd.get('email','') }}"
-             maxlength="200"
-             class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('email') }}">
-      {% if errs.get('email') %}<p class="text-red-600 text-sm mt-1">{{ errs['email'] }}</p>{% endif %}
-    </label>
-
+<div class="space-y-6">
+  <div class="space-y-2">
+    <h1 class="text-2xl font-semibold">サービス予約・見積</h1>
+    <p class="text-sm text-slate-600">ステップに沿ってご入力ください。途中でページを離れても内容はブラウザに保存されます。</p>
   </div>
 
-  <label class="block">サービス種別*
-    <select name="service_type"
-            class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('service_type') }}"
-            hx-post="{{ url_for('estimate') }}"
-            hx-target="#estimate-box"
-            hx-trigger="change from:closest form"
-            required>
-      <option value="">選択してください</option>
-      <option value="grave_cleaning" {{ 'selected' if fd.get('service_type')=='grave_cleaning' }}>お墓掃除代行</option>
-      <option value="appliance_setup" {{ 'selected' if fd.get('service_type')=='appliance_setup' }}>家電設置・設定</option>
-      <option value="errand" {{ 'selected' if fd.get('service_type')=='errand' }}>買い物・各種代行</option>
-    </select>
-    {% if errs.get('service_type') %}<p class="text-red-600 text-sm mt-1">{{ errs['service_type'] }}</p>{% endif %}
-  </label>
+  <div class="space-y-4">
+    <ol
+      id="booking-progress"
+      data-steps='{{ step_sequence | tojson }}'
+      class="flex flex-col gap-2 md:flex-row"
+    >
+      {% for step_name in step_sequence %}
+      <li class="flex-1">
+        <div
+          data-step="{{ step_name }}"
+          data-base-class="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm font-medium transition md:justify-center"
+          class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-400 transition md:justify-center"
+        >
+          <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-current text-xs">{{ loop.index }}</span>
+          <span class="flex-1 text-left md:text-center">{{ step_labels[step_name] }}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
 
-  <label class="block">住所・場所*
-    <input name="location"
-           value="{{ fd.get('location','') }}"
-           required maxlength="300"
-           class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('location') }}">
-    {% if errs.get('location') %}<p class="text-red-600 text-sm mt-1">{{ errs['location'] }}</p>{% endif %}
-  </label>
-
-  <label class="block">希望日
-    <input name="preferred_date" type="date"
-           value="{{ fd.get('preferred_date','') }}"
-           class="mt-1 w-full border rounded p-2 {{ 'border-red-500' if errs.get('preferred_date') }}">
-    {% if errs.get('preferred_date') %}<p class="text-red-600 text-sm mt-1">{{ errs['preferred_date'] }}</p>{% endif %}
-  </label>
-
-  <div class="md:col-span-2 border rounded p-3">
-    <div class="flex items-center gap-2">
-      <input id="opt_photo"
-             name="options_photoreport"
-             type="checkbox"
-             {% if fd.get('options_photoreport') %}checked{% endif %}
-             hx-post="{{ url_for('estimate') }}"
-             hx-target="#estimate-box"
-             hx-trigger="change from:closest form" />
-      <label for="opt_photo">写真レポート（+¥{{ photo_option_price }}）</label>
+    <div class="relative">
+      {{ initial_step_html | safe }}
     </div>
-    <textarea name="message" maxlength="500"
-              class="mt-2 w-full border rounded p-2 {{ 'border-red-500' if errs.get('message') }}"
-              rows="3" placeholder="ご要望や詳細">{{ fd.get('message','') }}</textarea>
-    {% if errs.get('message') %}<p class="text-red-600 text-sm mt-1">{{ errs['message'] }}</p>{% endif %}
   </div>
+</div>
 
-  <div id="estimate-box" class="md:col-span-2">
-    {# 価格はサーバから渡されたpriceを使う #}
-    {% include '_estimate_fragment.html' %}
-  </div>
+<script>
+(function () {
+  const STORAGE_KEY = "booking-progress";
 
-  <div class="md:col-span-2">
-    <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:opacity-90">この内容で予約を送信</button>
-  </div>
-</form>
+  function safeParse(value) {
+    if (!value) return {};
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      console.warn("Failed to parse stored progress", err);
+      return {};
+    }
+  }
 
+  function getStoredProgress() {
+    return safeParse(sessionStorage.getItem(STORAGE_KEY));
+  }
+
+  function storeProgress(data) {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function mergeProgress(payload) {
+    const next = { ...getStoredProgress(), ...(payload || {}) };
+    storeProgress(next);
+    return next;
+  }
+
+  function updateIndicator() {
+    const progressEl = document.getElementById("booking-progress");
+    const stepContainer = document.getElementById("booking-step");
+    if (!progressEl || !stepContainer) return;
+    const steps = safeParse(progressEl.dataset.steps);
+    const currentStep = stepContainer.dataset.step;
+    const currentIndex = steps.indexOf(currentStep);
+
+    progressEl.dataset.currentStep = currentStep;
+    progressEl.querySelectorAll("[data-step]").forEach((element) => {
+      const base = element.dataset.baseClass || element.className;
+      const stepName = element.dataset.step;
+      const idx = steps.indexOf(stepName);
+      let stateClass = " bg-white border-slate-200 text-slate-400";
+      if (idx < currentIndex) {
+        stateClass = " bg-emerald-500 border-emerald-500 text-white";
+      } else if (idx === currentIndex) {
+        stateClass = " bg-slate-900 border-slate-900 text-white";
+      }
+      element.className = `${base}${stateClass}`;
+      element.setAttribute("aria-current", idx === currentIndex ? "step" : "false");
+    });
+  }
+
+  function syncFromDataset() {
+    const stepContainer = document.getElementById("booking-step");
+    if (!stepContainer) return;
+    const payload = safeParse(stepContainer.dataset.progress);
+    mergeProgress(payload);
+  }
+
+  function hydrateFormFields() {
+    const stepContainer = document.getElementById("booking-step");
+    if (!stepContainer) return;
+    const form = stepContainer.querySelector("form[data-step-form]");
+    if (!form) return;
+    const data = getStoredProgress();
+    Object.entries(data).forEach(([key, value]) => {
+      const field = form.elements.namedItem(key);
+      if (!field) return;
+      if (field.type === "checkbox") {
+        field.checked = value === true || value === "on" || value === "true";
+      } else if (field.type === "radio") {
+        const radio = form.querySelector(`input[name="${key}"][value="${value}"]`);
+        if (radio) radio.checked = true;
+      } else {
+        field.value = value ?? "";
+      }
+    });
+  }
+
+  function collectFormData(form) {
+    const formData = new FormData(form);
+    const payload = {};
+    formData.forEach((value, key) => {
+      const field = form.elements.namedItem(key);
+      if (field && field.type === "checkbox") {
+        payload[key] = field.checked;
+      } else {
+        payload[key] = value;
+      }
+    });
+    Array.from(form.elements).forEach((field) => {
+      if (field.type === "checkbox" && !(field.name in payload)) {
+        payload[field.name] = field.checked;
+      }
+    });
+    return payload;
+  }
+
+  function handleFormChange(event) {
+    const form = event.target.closest("form[data-step-form]");
+    if (!form) return;
+    mergeProgress(collectFormData(form));
+  }
+
+  function initializeStep() {
+    syncFromDataset();
+    hydrateFormFields();
+    updateIndicator();
+  }
+
+  document.addEventListener("input", handleFormChange);
+  document.addEventListener("change", handleFormChange);
+  document.addEventListener("htmx:afterSwap", (event) => {
+    if (event.target.id === "booking-step") {
+      initializeStep();
+    }
+  });
+  window.addEventListener("load", initializeStep);
+})();
+</script>
 {% endblock %}

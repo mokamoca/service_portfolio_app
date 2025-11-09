@@ -1,0 +1,107 @@
+<div
+  id="booking-step"
+  data-step="service"
+  data-progress='{{ data | tojson }}'
+  class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+>
+  <form
+    data-step-form
+    hx-post="{{ url_for('booking_step', step='service') }}"
+    hx-target="#booking-step"
+    hx-swap="outerHTML"
+    class="grid gap-4"
+  >
+    <div>
+      <h2 class="text-lg font-semibold text-slate-800">サービス内容の選択</h2>
+      <p class="text-sm text-slate-500">ご希望の内容と訪問場所、日程をお知らせください。選択内容に応じて次のステップで詳細を確認できます。</p>
+    </div>
+
+    <label class="block space-y-2">
+      <span class="text-sm font-medium text-slate-700">サービス種別<span class="text-red-600">*</span></span>
+      <div class="space-y-1">
+        <select
+          name="service_type"
+          required
+          class="w-full rounded border p-2 focus:border-slate-500 focus:outline-none {{ 'border-red-500' if errors.get('service_type') }}"
+          hx-post="{{ url_for('booking_step', step='service') }}"
+          hx-target="#booking-step"
+          hx-swap="outerHTML"
+          hx-include="closest form"
+          hx-vals='{"_validate": "1"}'
+          hx-trigger="change"
+        >
+          <option value="">選択してください</option>
+          <option value="grave_cleaning" {{ 'selected' if data.service_type=='grave_cleaning' }}>お墓掃除代行</option>
+          <option value="appliance_setup" {{ 'selected' if data.service_type=='appliance_setup' }}>家電設置・設定</option>
+          <option value="errand" {{ 'selected' if data.service_type=='errand' }}>買い物・各種代行</option>
+        </select>
+        {% if errors.get('service_type') %}
+        <p class="text-xs text-red-600">{{ errors['service_type'] }}</p>
+        {% else %}
+        <p class="text-xs text-slate-500">サービスにより概算価格が異なります。迷った場合は備考欄でお知らせください。</p>
+        {% endif %}
+      </div>
+    </label>
+
+    <label class="block space-y-2">
+      <span class="text-sm font-medium text-slate-700">住所・場所<span class="text-red-600">*</span></span>
+      <div class="space-y-1">
+        <input
+          name="location"
+          value="{{ data.location }}"
+          maxlength="300"
+          required
+          class="w-full rounded border p-2 focus:border-slate-500 focus:outline-none {{ 'border-red-500' if errors.get('location') }}"
+          placeholder="例）◯◯市◯◯町◯-◯ 墓地・集合住宅名など"
+          hx-post="{{ url_for('booking_step', step='service') }}"
+          hx-target="#booking-step"
+          hx-swap="outerHTML"
+          hx-include="closest form"
+          hx-vals='{"_validate": "1"}'
+          hx-trigger="change delay:400ms, blur"
+        />
+        {% if errors.get('location') %}
+        <p class="text-xs text-red-600">{{ errors['location'] }}</p>
+        {% else %}
+        <p class="text-xs text-slate-500">建物名や目印など、当日の確認に必要な情報をご記入ください。</p>
+        {% endif %}
+      </div>
+    </label>
+
+    <label class="block space-y-2">
+      <span class="text-sm font-medium text-slate-700">希望日（任意）</span>
+      <div class="space-y-1">
+        <input
+          name="preferred_date"
+          type="date"
+          value="{{ data.preferred_date }}"
+          class="w-full rounded border p-2 focus:border-slate-500 focus:outline-none {{ 'border-red-500' if errors.get('preferred_date') }}"
+          hx-post="{{ url_for('booking_step', step='service') }}"
+          hx-target="#booking-step"
+          hx-swap="outerHTML"
+          hx-include="closest form"
+          hx-vals='{"_validate": "1"}'
+          hx-trigger="change, blur"
+        />
+        {% if errors.get('preferred_date') %}
+        <p class="text-xs text-red-600">{{ errors['preferred_date'] }}</p>
+        {% else %}
+        <p class="text-xs text-slate-500">ご希望があれば第1希望日を選択してください。半年以内で指定可能です。</p>
+        {% endif %}
+      </div>
+    </label>
+
+    <div class="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:justify-between">
+      <button
+        type="button"
+        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+        hx-get="{{ url_for('booking_step', step='contact') }}"
+        hx-target="#booking-step"
+        hx-swap="outerHTML"
+      >
+        戻る
+      </button>
+      <button type="submit" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90">次へ進む</button>
+    </div>
+  </form>
+</div>

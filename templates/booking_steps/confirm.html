@@ -1,0 +1,91 @@
+<div
+  id="booking-step"
+  data-step="confirm"
+  data-progress='{{ data | tojson }}'
+  class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+>
+  <div class="space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-800">入力内容の確認</h2>
+      <p class="text-sm text-slate-500">以下の内容で送信します。修正したい箇所があれば戻るボタンで該当ステップを編集してください。</p>
+    </div>
+
+    {% if errors %}
+    <div class="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+      <p class="font-semibold">入力内容に不備があります。再度ご確認ください。</p>
+      <ul class="list-disc pl-5">
+        {% for msg in errors.values() %}
+        <li>{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-600">連絡先</h3>
+        <dl class="mt-2 space-y-1 text-sm text-slate-700">
+          <div class="flex justify-between gap-4"><dt class="font-medium">お名前</dt><dd class="text-right">{{ data.name }}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="font-medium">電話番号</dt><dd class="text-right">{{ data.phone }}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="font-medium">メール</dt><dd class="text-right">{{ data.email or '（未入力）' }}</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-slate-600">サービス</h3>
+        <dl class="mt-2 space-y-1 text-sm text-slate-700">
+          <div class="flex justify-between gap-4"><dt class="font-medium">種別</dt><dd class="text-right">{{ service_labels.get(data.service_type, data.service_type) }}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="font-medium">住所・場所</dt><dd class="text-right">{{ data.location }}</dd></div>
+          <div class="flex justify-between gap-4"><dt class="font-medium">希望日</dt><dd class="text-right">{{ data.preferred_date or '指定なし' }}</dd></div>
+        </dl>
+      </div>
+      <div class="md:col-span-2">
+        <h3 class="text-sm font-semibold text-slate-600">オプション・備考</h3>
+        <dl class="mt-2 space-y-1 text-sm text-slate-700">
+          <div class="flex justify-between gap-4"><dt class="font-medium">写真レポート</dt><dd class="text-right">{{ 'あり' if data.options_photoreport else 'なし' }}</dd></div>
+          <div>
+            <dt class="font-medium">備考</dt>
+            <dd class="whitespace-pre-line text-slate-600">{{ data.message or '（特になし）' }}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500">概算お見積り</div>
+      <div class="text-3xl font-bold text-slate-900">¥{{ price | int }}</div>
+      <div class="text-xs text-slate-500">最終金額は現地確認後にご案内いたします。</div>
+    </div>
+
+    <form
+      data-step-form
+      hx-post="{{ url_for('book') }}"
+      hx-target="#booking-step"
+      hx-swap="outerHTML"
+      class="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:justify-between"
+    >
+      <div class="hidden">
+        <input type="hidden" name="name" value="{{ data.name }}" />
+        <input type="hidden" name="phone" value="{{ data.phone }}" />
+        <input type="hidden" name="email" value="{{ data.email }}" />
+        <input type="hidden" name="service_type" value="{{ data.service_type }}" />
+        <input type="hidden" name="location" value="{{ data.location }}" />
+        <input type="hidden" name="preferred_date" value="{{ data.preferred_date }}" />
+        <input type="hidden" name="message" value="{{ data.message }}" />
+        {% if data.options_photoreport %}
+        <input type="hidden" name="options_photoreport" value="on" />
+        {% endif %}
+      </div>
+
+      <button
+        type="button"
+        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+        hx-get="{{ url_for('booking_step', step='options') }}"
+        hx-target="#booking-step"
+        hx-swap="outerHTML"
+      >
+        戻る
+      </button>
+      <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-500">この内容で送信する</button>
+    </form>
+  </div>
+</div>

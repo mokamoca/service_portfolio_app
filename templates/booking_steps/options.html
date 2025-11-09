@@ -1,0 +1,103 @@
+<div
+  id="booking-step"
+  data-step="options"
+  data-progress='{{ data | tojson }}'
+  class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+>
+  <form
+    data-step-form
+    hx-post="{{ url_for('booking_step', step='options') }}"
+    hx-target="#booking-step"
+    hx-swap="outerHTML"
+    class="grid gap-4"
+  >
+    <div>
+      <h2 class="text-lg font-semibold text-slate-800">オプションとご要望</h2>
+      <p class="text-sm text-slate-500">必要に応じてオプションを追加し、ご要望があれば備考欄にご記入ください。</p>
+    </div>
+
+    <div class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <label for="opt_photo" class="flex items-start gap-3">
+        <input
+          id="opt_photo"
+          name="options_photoreport"
+          type="checkbox"
+          class="mt-1 h-4 w-4 rounded border-slate-400 text-slate-900 focus:ring-slate-900"
+          {% if data.options_photoreport %}checked{% endif %}
+          hx-post="{{ url_for('booking_step', step='options') }}"
+          hx-target="#booking-step"
+          hx-swap="outerHTML"
+          hx-include="closest form"
+          hx-vals='{"_validate": "1"}'
+          hx-trigger="change"
+        />
+        <span class="space-y-1">
+          <span class="flex items-center gap-2 text-sm font-medium text-slate-700">
+            写真レポート
+            <button
+              type="button"
+              class="group relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-400 text-[10px] text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+              aria-label="写真レポートの説明"
+            >
+              ?
+              <span class="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-60 -translate-x-1/2 rounded-md bg-slate-900 p-2 text-left text-xs font-normal leading-relaxed text-white shadow-xl group-hover:block group-focus-visible:block">
+                訪問前後の写真と簡単な作業レポートをメールでお届けします。遠方にお住まいの場合でも様子を確認いただけます。
+              </span>
+            </button>
+          </span>
+          <span class="text-xs text-slate-500">+¥{{ photo_option_price }} / 回</span>
+        </span>
+      </label>
+      <p class="text-xs text-slate-500">オプションはいつでもキャンセル可能です。不要な場合はチェックを外してください。</p>
+    </div>
+
+    <label class="block space-y-2">
+      <span class="text-sm font-medium text-slate-700">ご要望・備考（任意）</span>
+      <div class="space-y-1">
+        <textarea
+          name="message"
+          rows="4"
+          maxlength="500"
+          class="w-full rounded border p-2 focus:border-slate-500 focus:outline-none {{ 'border-red-500' if errors.get('message') }}"
+          placeholder="例）清掃の頻度や注意してほしいポイントがあればご記入ください。"
+          hx-post="{{ url_for('booking_step', step='options') }}"
+          hx-target="#booking-step"
+          hx-swap="outerHTML"
+          hx-include="closest form"
+          hx-vals='{"_validate": "1"}'
+          hx-trigger="change delay:400ms, blur"
+        >{{ data.message }}</textarea>
+        {% if errors.get('message') %}
+        <p class="text-xs text-red-600">{{ errors['message'] }}</p>
+        {% else %}
+        <p class="text-xs text-slate-500">500文字以内でご記入ください。後ほどスタッフより確認のご連絡を差し上げます。</p>
+        {% endif %}
+      </div>
+    </label>
+
+    <div
+      id="estimate-box"
+      class="rounded-lg border border-slate-200 bg-white p-4"
+      hx-post="{{ url_for('estimate') }}"
+      hx-target="#estimate-box"
+      hx-swap="outerHTML"
+      hx-include="closest form"
+      hx-trigger="load, change from:form[data-step-form]"
+    >
+      {% include '_estimate_fragment.html' %}
+    </div>
+
+    <div class="flex flex-col gap-3 border-t border-slate-200 pt-4 md:flex-row md:justify-between">
+      <button
+        type="button"
+        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+        hx-get="{{ url_for('booking_step', step='service') }}"
+        hx-target="#booking-step"
+        hx-swap="outerHTML"
+      >
+        戻る
+      </button>
+      <button type="submit" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90">確認へ進む</button>
+    </div>
+  </form>
+</div>
