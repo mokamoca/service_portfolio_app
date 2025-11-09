@@ -31,16 +31,17 @@
           hx-trigger="change"
         >
           <option value="">選択してください</option>
-          <option value="grave_cleaning" {{ 'selected' if data.service_type=='grave_cleaning' }}>お墓掃除代行</option>
-          <option value="appliance_setup" {{ 'selected' if data.service_type=='appliance_setup' }}>家電設置・設定</option>
-          <option value="errand" {{ 'selected' if data.service_type=='errand' }}>買い物・各種代行</option>
+          {% for key, label in service_labels.items() %}
+          <option value="{{ key }}" {{ 'selected' if data.service_type==key }}>
+            {{ label }}（¥{{ service_price_table[key] }}〜）
+          </option>
+          {% endfor %}
         </select>
         {% if errors.get('service_type') %}
         <p class="text-xs text-red-600">{{ errors['service_type'] }}</p>
         {% else %}
         <p class="text-xs text-slate-500">サービスにより概算価格が異なります。迷った場合は備考欄でお知らせください。</p>
         {% endif %}
-      </div>
     </label>
 
     <label class="block space-y-2">

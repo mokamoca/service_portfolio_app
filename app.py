@@ -17,6 +17,7 @@ from flask import (
     make_response,
 )
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from sqlalchemy.orm import validates
 
 import re
@@ -32,6 +33,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+app.jinja_env.globals["getattr"] = getattr
 
 # ---------- Model ----------
 class Booking(db.Model):
@@ -43,11 +45,14 @@ class Booking(db.Model):
     email = db.Column(db.String(200))
     phone = db.Column(db.String(50), nullable=False)
 
-    service_type = db.Column(db.String(50), nullable=False)  # 'grave_cleaning', etc.
+    service_type = db.Column(db.String(50), nullable=False)  # 'storefront_cleaning', etc.
     location = db.Column(db.String(300), nullable=False)
     preferred_date = db.Column(db.Date, nullable=True)
 
     options_photoreport = db.Column(db.Boolean, default=False)
+    options_priority_visit = db.Column(db.Boolean, default=False)
+    options_weekend_visit = db.Column(db.Boolean, default=False)
+    options_extra_staff = db.Column(db.Boolean, default=False)
     message = db.Column(db.Text)
 
     est_price = db.Column(db.Integer, default=0)
@@ -61,30 +66,70 @@ class Booking(db.Model):
             raise ValueError("メール形式が不正です")
         return value
 
-# --- Bookingモデル定義の直後に追加/移動 ---
-with app.app_context():
-    db.create_all()
-    print("DB ready at", DB_PATH)
-# -----------------------------------------
-
-
 # ---------- Estimate Logic ----------
 SERVICE_PRICE_TABLE = {
-    "grave_cleaning": 6000,
-    "appliance_setup": 8000,
-    "errand": 4000,
+    "storefront_cleaning": 15000,
+    "fixture_install": 26000,
+    "event_support": 22000,
+    "emergency_support": 14000,
+    "office_move_light": 32000,
 }
 
 SERVICE_LABELS = {
-    "grave_cleaning": "お墓掃除代行",
-    "appliance_setup": "家電設置・設定",
-    "errand": "買い物・各種代行",
+    "storefront_cleaning": "店舗定期清掃ライト",
+    "fixture_install": "什器・設備の搬入設置",
+    "event_support": "イベント設営サポート",
+    "emergency_support": "緊急トラブル一次対応",
+    "office_move_light": "小規模オフィス移転ヘルプ",
 }
 
-OPTION_PRICE = {
-    "photoreport": 1000,
-}
+OPTION_DEFINITIONS = [
+    {
+        "field": "options_photoreport",
+        "label": "作業写真レポート（写真追加）",
+        "description": "Before / After の写真と簡単な作業ログをメールで共有します。",
+        "price": 1000,
+    },
+    {
+        "field": "options_priority_visit",
+        "label": "至急訪問（48時間以内）",
+        "description": "最優先枠でスケジューリングし、48時間以内にスタッフが伺います。",
+        "price": 4000,
+    },
+    {
+        "field": "options_weekend_visit",
+        "label": "土日祝日の訪問確約",
+        "description": "土日祝の作業枠を事前確保し、追加料金なしで対応します。",
+        "price": 2500,
+    },
+    {
+        "field": "options_extra_staff",
+        "label": "追加スタッフ帯同（2名体制）",
+        "description": "大型什器や重量物の搬入時に、補助スタッフを1名追加します。",
+        "price": 6000,
+    },
+]
 
+OPTION_FIELDS = [item['field'] for item in OPTION_DEFINITIONS]
+OPTION_PRICE = {item['field']: item['price'] for item in OPTION_DEFINITIONS}
+
+
+def ensure_booking_schema():
+    with app.app_context():
+        db.create_all()
+        pragma_rows = db.session.execute(text("PRAGMA table_info(bookings)")).mappings()
+        existing_columns = {row["name"] for row in pragma_rows}
+        missing_fields = [field for field in OPTION_FIELDS if field not in existing_columns]
+        for field in missing_fields:
+            db.session.execute(
+                text(f"ALTER TABLE bookings ADD COLUMN {field} BOOLEAN DEFAULT 0")
+            )
+        if missing_fields:
+            db.session.commit()
+            print("Added booking columns:", ", ".join(missing_fields))
+
+
+ensure_booking_schema()
 
 STEP_SEQUENCE = ["contact", "service", "options", "confirm"]
 STEP_TEMPLATES = {
@@ -102,29 +147,32 @@ STEP_LABELS = {
 STEP_FIELDS = {
     "contact": ["name", "phone", "email"],
     "service": ["service_type", "location", "preferred_date"],
-    "options": ["options_photoreport", "message"],
+    "options": list(OPTION_FIELDS) + ["message"],
     "confirm": [],
 }
 
 
 def _default_progress():
-    return {
+    data = {
         "name": "",
         "email": "",
         "phone": "",
         "service_type": "",
         "location": "",
         "preferred_date": "",
-        "options_photoreport": False,
         "message": "",
     }
+    for field in OPTION_FIELDS:
+        data[field] = False
+    return data
 
 
 def _normalize_progress(raw):
     progress = _default_progress()
     if raw:
         progress.update(raw)
-    progress["options_photoreport"] = bool(progress.get("options_photoreport"))
+    for field in OPTION_FIELDS:
+        progress[field] = bool(progress.get(field))
     progress["preferred_date"] = progress.get("preferred_date") or ""
     return progress
 
@@ -170,18 +218,19 @@ def render_step_template(step, data, errors=None):
     payload = _normalize_progress(data)
     errors = errors or {}
     prev_step, next_step = get_adjacent_steps(step)
+    option_flags = {field: payload.get(field, False) for field in OPTION_FIELDS}
     price = 0
     if payload["service_type"] in SERVICE_PRICE_TABLE:
         price = calc_estimate(
             payload["service_type"],
-            {"photoreport": payload.get("options_photoreport", False)},
+            option_flags,
         )
     return render_template(
         STEP_TEMPLATES[step],
         data=payload,
         errors=errors,
         price=price,
-        photo_option_price=OPTION_PRICE["photoreport"],
+        option_catalog=OPTION_DEFINITIONS,
         service_price_table=SERVICE_PRICE_TABLE,
         service_labels=SERVICE_LABELS,
         step=step,
@@ -194,7 +243,7 @@ def render_step_template(step, data, errors=None):
 
 def calc_estimate(service_type: str, options: dict) -> int:
     base = SERVICE_PRICE_TABLE.get(service_type, 0)
-    extra = OPTION_PRICE["photoreport"] if options.get("photoreport") else 0
+    extra = sum(OPTION_PRICE.get(field, 0) for field, enabled in options.items() if enabled)
     return base + extra
 
 # ---------- Validation ----------
@@ -214,9 +263,14 @@ def validate_and_clean(form, *, partial=False, fields=None):
         "service_type": form.get("service_type") or "",
         "location": (form.get("location") or "").strip(),
         "preferred_date": form.get("preferred_date") or "",
-        "options_photoreport": (form.get("options_photoreport") == "on"),
         "message": (form.get("message") or "").strip(),
     }
+    for field in OPTION_FIELDS:
+        raw_value = form.get(field)
+        if isinstance(raw_value, bool):
+            data[field] = raw_value
+        else:
+            data[field] = raw_value == "on"
     errors = {}
 
     fields_set = set(fields or data.keys())
@@ -297,7 +351,11 @@ def requires_auth(f):
 @app.context_processor
 def inject_globals():
     from datetime import datetime
-    return dict(current_year=datetime.now().year)
+    return dict(
+        current_year=datetime.now().year,
+        service_labels=SERVICE_LABELS,
+        option_catalog=OPTION_DEFINITIONS,
+    )
 
 
 @app.route("/")
@@ -328,7 +386,8 @@ def booking_step(step):
     validate_only = incoming.pop("_validate", "") == "1"
 
     if step == "options":
-        incoming["options_photoreport"] = "on" if request.form.get("options_photoreport") else ""
+        for field in OPTION_FIELDS:
+            incoming[field] = "on" if request.form.get(field) else ""
 
     combined = {**progress, **incoming}
     cleaned, errors = validate_and_clean(
@@ -359,30 +418,29 @@ def booking_step(step):
 def estimate():
     progress = get_booking_progress()
     incoming = request.form.to_dict(flat=True)
-    if "options_photoreport" in incoming:
-        incoming["options_photoreport"] = (
-            "on" if request.form.get("options_photoreport") else ""
-        )
+    if incoming:
+        for field in OPTION_FIELDS:
+            incoming[field] = "on" if request.form.get(field) else ""
     combined = {**progress, **incoming}
     cleaned, _ = validate_and_clean(
         combined,
         partial=True,
-        fields=["service_type", "options_photoreport"],
+        fields=["service_type", *OPTION_FIELDS],
     )
     store_booking_progress(cleaned)
     service_type = cleaned.get("service_type")
     price = 0
     if service_type in SERVICE_PRICE_TABLE:
         price = calc_estimate(
-            service_type, {"photoreport": cleaned.get("options_photoreport", False)}
+            service_type, {field: cleaned.get(field, False) for field in OPTION_FIELDS}
         )
     return render_template("_estimate_fragment.html", price=price)
 
 @app.route("/book", methods=["POST"])
 def book():
     payload = request.form.to_dict(flat=True)
-    if "options_photoreport" not in payload:
-        payload["options_photoreport"] = ""
+    for field in OPTION_FIELDS:
+        payload.setdefault(field, "")
     data, errors = validate_and_clean(payload)
     if errors:
         store_booking_progress(data)
@@ -396,7 +454,8 @@ def book():
         datetime.strptime(data["preferred_date"], "%Y-%m-%d").date()
         if data["preferred_date"] else None
     )
-    est_price = calc_estimate(data["service_type"], {"photoreport": data["options_photoreport"]})
+    option_flags = {field: data.get(field, False) for field in OPTION_FIELDS}
+    est_price = calc_estimate(data["service_type"], option_flags)
 
     b = Booking(
         name=data["name"],
@@ -405,7 +464,7 @@ def book():
         service_type=data["service_type"],
         location=data["location"],
         preferred_date=preferred_date,
-        options_photoreport=data["options_photoreport"],
+        **{field: data.get(field, False) for field in OPTION_FIELDS},
         message=(data["message"] or None),
         est_price=est_price,
     )
@@ -469,8 +528,10 @@ def admin_update(booking_id):
 def admin_export_csv():
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID","作成日時","名前","電話","メール","サービス","住所/場所",
-                     "希望日","写真レポ","見積","ステータス","管理メモ"])
+    writer.writerow([
+        "ID","作成日時","名前","電話","メール","サービス","住所/場所",
+        "希望日","写真レポ","至急訪問","土日祝訪問","追加スタッフ","見積","ステータス","管理メモ"
+    ])
     for b in Booking.query.order_by(Booking.id).all():
         writer.writerow([
             b.id,
@@ -482,6 +543,9 @@ def admin_export_csv():
             b.location,
             b.preferred_date.isoformat() if b.preferred_date else "",
             "Yes" if b.options_photoreport else "No",
+            "Yes" if b.options_priority_visit else "No",
+            "Yes" if b.options_weekend_visit else "No",
+            "Yes" if b.options_extra_staff else "No",
             b.est_price,
             b.status,
             (b.admin_note or "").replace("\n", " "),

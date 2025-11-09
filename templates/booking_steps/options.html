@@ -17,13 +17,14 @@
     </div>
 
     <div class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <label for="opt_photo" class="flex items-start gap-3">
+      {% for opt in option_catalog %}
+      <label for="opt_{{ opt.field }}" class="flex items-start gap-3">
         <input
-          id="opt_photo"
-          name="options_photoreport"
+          id="opt_{{ opt.field }}"
+          name="{{ opt.field }}"
           type="checkbox"
           class="mt-1 h-4 w-4 rounded border-slate-400 text-slate-900 focus:ring-slate-900"
-          {% if data.options_photoreport %}checked{% endif %}
+          {% if data[opt.field] %}checked{% endif %}
           hx-post="{{ url_for('booking_step', step='options') }}"
           hx-target="#booking-step"
           hx-swap="outerHTML"
@@ -32,23 +33,13 @@
           hx-trigger="change"
         />
         <span class="space-y-1">
-          <span class="flex items-center gap-2 text-sm font-medium text-slate-700">
-            写真レポート
-            <button
-              type="button"
-              class="group relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-400 text-[10px] text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-              aria-label="写真レポートの説明"
-            >
-              ?
-              <span class="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-60 -translate-x-1/2 rounded-md bg-slate-900 p-2 text-left text-xs font-normal leading-relaxed text-white shadow-xl group-hover:block group-focus-visible:block">
-                訪問前後の写真と簡単な作業レポートをメールでお届けします。遠方にお住まいの場合でも様子を確認いただけます。
-              </span>
-            </button>
-          </span>
-          <span class="text-xs text-slate-500">+¥{{ photo_option_price }} / 回</span>
+          <span class="text-sm font-medium text-slate-700">{{ opt.label }}</span>
+          <span class="text-xs text-slate-500">+¥{{ opt.price }} / 件</span>
+          <p class="text-xs text-slate-500">{{ opt.description }}</p>
         </span>
       </label>
-      <p class="text-xs text-slate-500">オプションはいつでもキャンセル可能です。不要な場合はチェックを外してください。</p>
+      {% endfor %}
+      <p class="text-xs text-slate-500">オプションは訪問前であれば無料で変更できます。不要な場合はチェックを外してください。</p>
     </div>
 
     <label class="block space-y-2">
