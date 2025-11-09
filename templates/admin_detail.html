@@ -8,10 +8,19 @@
 <dt class="text-slate-500">名前</dt><dd class="col-span-2">{{ b.name }}</dd>
 <dt class="text-slate-500">電話</dt><dd class="col-span-2">{{ b.phone }}</dd>
 <dt class="text-slate-500">メール</dt><dd class="col-span-2">{{ b.email or '—' }}</dd>
-<dt class="text-slate-500">サービス</dt><dd class="col-span-2">{{ b.service_type }}</dd>
+<dt class="text-slate-500">サービス</dt><dd class="col-span-2">{{ service_labels.get(b.service_type, b.service_type) }}</dd>
 <dt class="text-slate-500">住所/場所</dt><dd class="col-span-2">{{ b.location }}</dd>
 <dt class="text-slate-500">希望日</dt><dd class="col-span-2">{{ b.preferred_date or '—' }}</dd>
-<dt class="text-slate-500">写真レポ</dt><dd class="col-span-2">{{ 'あり' if b.options_photoreport else 'なし' }}</dd>
+<dt class="text-slate-500">追加オプション</dt><dd class="col-span-2">
+  {% set selected = namespace(count=0) %}
+  {% for opt in option_catalog %}
+    {% if getattr(b, opt.field, False) %}
+      {% set selected.count = selected.count + 1 %}
+      <span class="inline-block mr-2">{{ opt.label }}（+¥{{ opt.price }}）</span>
+    {% endif %}
+  {% endfor %}
+  {% if not selected.count %}なし{% endif %}
+</dd>
 <dt class="text-slate-500">概算見積</dt><dd class="col-span-2">¥{{ b.est_price }}</dd>
 <dt class="text-slate-500">メモ</dt><dd class="col-span-2 whitespace-pre-line">{{ b.message or '—' }}</dd>
 </dl>

@@ -7,7 +7,18 @@
 <li><b>受付番号</b>: {{ booking.id }}</li>
 <li><b>お名前</b>: {{ booking.name }}</li>
 <li><b>電話</b>: {{ booking.phone }}</li>
-<li><b>サービス</b>: {{ booking.service_type }}</li>
+<li><b>サービス</b>: {{ service_labels.get(booking.service_type, booking.service_type) }}</li>
+<li>
+  <b>追加オプション</b>:
+  {% set selected = namespace(count=0) %}
+  {% for opt in option_catalog %}
+    {% if getattr(booking, opt.field, False) %}
+      {% set selected.count = selected.count + 1 %}
+      <span class="inline-block mr-2">{{ opt.label }}（+¥{{ opt.price }}）</span>
+    {% endif %}
+  {% endfor %}
+  {% if not selected.count %}なし{% endif %}
+</li>
 <li><b>住所/場所</b>: {{ booking.location }}</li>
 <li><b>希望日</b>: {{ booking.preferred_date or '（指定なし）' }}</li>
 <li><b>概算見積</b>: ¥{{ booking.est_price }}</li>

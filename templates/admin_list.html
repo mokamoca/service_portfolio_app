@@ -35,7 +35,7 @@
 <td class="p-2">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
 <td class="p-2">{{ b.name }}</td>
 <td class="p-2">{{ b.phone }}</td>
-<td class="p-2">{{ b.service_type }}</td>
+<td class="p-2">{{ service_labels.get(b.service_type, b.service_type) }}</td>
 <td class="p-2">{{ b.location }}</td>
 <td class="p-2">¥{{ b.est_price }}</td>
 <td class="p-2">{{ b.status }}</td>

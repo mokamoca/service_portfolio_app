@@ -41,7 +41,21 @@
       <div class="md:col-span-2">
         <h3 class="text-sm font-semibold text-slate-600">オプション・備考</h3>
         <dl class="mt-2 space-y-1 text-sm text-slate-700">
-          <div class="flex justify-between gap-4"><dt class="font-medium">写真レポート</dt><dd class="text-right">{{ 'あり' if data.options_photoreport else 'なし' }}</dd></div>
+          <div>
+            <dt class="font-medium">追加オプション</dt>
+            <dd class="text-right">
+              {% set selected = namespace(count=0) %}
+              {% for opt in option_catalog %}
+                {% if data[opt.field] %}
+                  {% set selected.count = selected.count + 1 %}
+                  <span class="block">{{ opt.label }}（+¥{{ opt.price }}）</span>
+                {% endif %}
+              {% endfor %}
+              {% if not selected.count %}
+              <span class="text-slate-500">なし</span>
+              {% endif %}
+            </dd>
+          </div>
           <div>
             <dt class="font-medium">備考</dt>
             <dd class="whitespace-pre-line text-slate-600">{{ data.message or '（特になし）' }}</dd>
@@ -71,9 +85,11 @@
         <input type="hidden" name="location" value="{{ data.location }}" />
         <input type="hidden" name="preferred_date" value="{{ data.preferred_date }}" />
         <input type="hidden" name="message" value="{{ data.message }}" />
-        {% if data.options_photoreport %}
-        <input type="hidden" name="options_photoreport" value="on" />
+        {% for opt in option_catalog %}
+        {% if data[opt.field] %}
+        <input type="hidden" name="{{ opt.field }}" value="on" />
         {% endif %}
+        {% endfor %}
       </div>
 
       <button
