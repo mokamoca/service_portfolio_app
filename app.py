@@ -5,7 +5,16 @@ import io
 from functools import wraps
 
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, Response
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    Response,
+    session,
+    abort,
+    make_response,
 )
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import validates
@@ -66,9 +75,122 @@ SERVICE_PRICE_TABLE = {
     "errand": 4000,
 }
 
+SERVICE_LABELS = {
+    "grave_cleaning": "お墓掃除代行",
+    "appliance_setup": "家電設置・設定",
+    "errand": "買い物・各種代行",
+}
+
 OPTION_PRICE = {
     "photoreport": 1000,
 }
+
+
+STEP_SEQUENCE = ["contact", "service", "options", "confirm"]
+STEP_TEMPLATES = {
+    "contact": "booking_steps/contact.html",
+    "service": "booking_steps/service.html",
+    "options": "booking_steps/options.html",
+    "confirm": "booking_steps/confirm.html",
+}
+STEP_LABELS = {
+    "contact": "連絡先",
+    "service": "サービス詳細",
+    "options": "オプション",
+    "confirm": "確認",
+}
+STEP_FIELDS = {
+    "contact": ["name", "phone", "email"],
+    "service": ["service_type", "location", "preferred_date"],
+    "options": ["options_photoreport", "message"],
+    "confirm": [],
+}
+
+
+def _default_progress():
+    return {
+        "name": "",
+        "email": "",
+        "phone": "",
+        "service_type": "",
+        "location": "",
+        "preferred_date": "",
+        "options_photoreport": False,
+        "message": "",
+    }
+
+
+def _normalize_progress(raw):
+    progress = _default_progress()
+    if raw:
+        progress.update(raw)
+    progress["options_photoreport"] = bool(progress.get("options_photoreport"))
+    progress["preferred_date"] = progress.get("preferred_date") or ""
+    return progress
+
+
+def get_booking_progress():
+    return _normalize_progress(session.get("booking_progress"))
+
+
+def store_booking_progress(progress):
+    session["booking_progress"] = _normalize_progress(progress)
+    session.modified = True
+
+
+def clear_booking_progress():
+    session.pop("booking_progress", None)
+    session.pop("booking_current_step", None)
+
+
+def get_current_step():
+    step = session.get("booking_current_step")
+    if step not in STEP_SEQUENCE:
+        step = STEP_SEQUENCE[0]
+    return step
+
+
+def set_current_step(step):
+    session["booking_current_step"] = step if step in STEP_SEQUENCE else STEP_SEQUENCE[0]
+    session.modified = True
+
+
+def get_adjacent_steps(step):
+    if step not in STEP_SEQUENCE:
+        return None, None
+    idx = STEP_SEQUENCE.index(step)
+    prev_step = STEP_SEQUENCE[idx - 1] if idx > 0 else None
+    next_step = STEP_SEQUENCE[idx + 1] if idx + 1 < len(STEP_SEQUENCE) else None
+    return prev_step, next_step
+
+
+def render_step_template(step, data, errors=None):
+    if step not in STEP_TEMPLATES:
+        abort(404)
+    payload = _normalize_progress(data)
+    errors = errors or {}
+    prev_step, next_step = get_adjacent_steps(step)
+    price = 0
+    if payload["service_type"] in SERVICE_PRICE_TABLE:
+        price = calc_estimate(
+            payload["service_type"],
+            {"photoreport": payload.get("options_photoreport", False)},
+        )
+    return render_template(
+        STEP_TEMPLATES[step],
+        data=payload,
+        errors=errors,
+        price=price,
+        photo_option_price=OPTION_PRICE["photoreport"],
+        service_price_table=SERVICE_PRICE_TABLE,
+        service_labels=SERVICE_LABELS,
+        step=step,
+        prev_step=prev_step,
+        next_step=next_step,
+        step_sequence=STEP_SEQUENCE,
+        step_labels=STEP_LABELS,
+    )
+
 
 def calc_estimate(service_type: str, options: dict) -> int:
     base = SERVICE_PRICE_TABLE.get(service_type, 0)
@@ -82,7 +204,7 @@ from datetime import date
 ALLOWED_SERVICE_TYPES = set(SERVICE_PRICE_TABLE.keys())
 PHONE_RE = re.compile(r"^[0-9+\-() ]{9,16}$")
 
-def validate_and_clean(form):
+def validate_and_clean(form, *, partial=False, fields=None):
     """フォーム値を整形しつつ検証し、(cleaned_data, errors) を返す"""
     # 1) まず整形（stripや型変換）
     data = {
@@ -97,33 +219,47 @@ def validate_and_clean(form):
     }
     errors = {}
 
+    fields_set = set(fields or data.keys())
+
     # 2) 必須
     for key in ["name", "phone", "service_type", "location"]:
-        if not data[key]:
+        if not data[key] and (not partial or key in fields_set):
             errors[key] = "必須項目です"
 
     # 3) サービス種別
-    if data["service_type"] and data["service_type"] not in ALLOWED_SERVICE_TYPES:
+    if (
+        data["service_type"]
+        and data["service_type"] not in ALLOWED_SERVICE_TYPES
+        and (not partial or "service_type" in fields_set)
+    ):
         errors["service_type"] = "不正な選択です"
 
     # 4) 電話番号
-    if data["phone"] and not PHONE_RE.match(data["phone"]):
+    if (
+        data["phone"]
+        and not PHONE_RE.match(data["phone"])
+        and (not partial or "phone" in fields_set)
+    ):
         errors["phone"] = "数字・+ - () とスペースのみ、9〜16桁で入力してください"
 
     # 5) メール（任意）
-    if data["email"] and ("@" not in data["email"] or "." not in data["email"] or len(data["email"]) > 200):
+    if (
+        data["email"]
+        and ("@" not in data["email"] or "." not in data["email"] or len(data["email"]) > 200)
+        and (not partial or "email" in fields_set)
+    ):
         errors["email"] = "メール形式が不正です"
 
     # 6) 文字数
-    if len(data["name"]) > 120:
+    if len(data["name"]) > 120 and (not partial or "name" in fields_set):
         errors["name"] = "120文字以内で入力してください"
-    if len(data["location"]) > 300:
+    if len(data["location"]) > 300 and (not partial or "location" in fields_set):
         errors["location"] = "300文字以内で入力してください"
-    if len(data["message"]) > 500:
+    if len(data["message"]) > 500 and (not partial or "message" in fields_set):
         errors["message"] = "500文字以内で入力してください"
 
     # 7) 日付（任意）：過去不可、半年先まで
-    if data["preferred_date"]:
+    if data["preferred_date"] and (not partial or "preferred_date" in fields_set):
         try:
             d = datetime.strptime(data["preferred_date"], "%Y-%m-%d").date()
         except ValueError:
@@ -166,41 +302,94 @@ def inject_globals():
 
 @app.route("/")
 def index():
+    progress = get_booking_progress()
+    store_booking_progress(progress)
+    current_step = get_current_step()
+    set_current_step(current_step)
+    step_html = render_step_template(current_step, progress)
     return render_template(
         "booking_form.html",
-        service_price_table=SERVICE_PRICE_TABLE,
-        photo_option_price=OPTION_PRICE["photoreport"],
-        form_data={},        # ← 追加
-        errors={},           # ← 追加
-        price=0,             # ← 初期の概算価格
+        current_step=current_step,
+        step_sequence=STEP_SEQUENCE,
+        step_labels=STEP_LABELS,
+        initial_step_html=step_html,
     )
+
+@app.route("/booking/step/<step>", methods=["GET", "POST"])
+def booking_step(step):
+    if step not in STEP_SEQUENCE:
+        abort(404)
+    progress = get_booking_progress()
+    if request.method == "GET":
+        set_current_step(step)
+        return render_step_template(step, progress)
+
+    incoming = request.form.to_dict(flat=True)
+    validate_only = incoming.pop("_validate", "") == "1"
+
+    if step == "options":
+        incoming["options_photoreport"] = "on" if request.form.get("options_photoreport") else ""
+
+    combined = {**progress, **incoming}
+    cleaned, errors = validate_and_clean(
+        combined, partial=True, fields=STEP_FIELDS.get(step)
+    )
+    step_errors = {k: v for k, v in errors.items() if k in STEP_FIELDS.get(step, [])}
+
+    store_booking_progress(cleaned)
+
+    if step_errors:
+        set_current_step(step)
+        return render_step_template(step, cleaned, errors=step_errors)
+
+    if validate_only:
+        set_current_step(step)
+        return render_step_template(step, cleaned)
+
+    _, next_step = get_adjacent_steps(step)
+    if next_step:
+        set_current_step(next_step)
+        return render_step_template(next_step, cleaned)
+
+    set_current_step(step)
+    return render_step_template(step, cleaned)
+
 
 @app.route("/estimate", methods=["POST"])
 def estimate():
-    service_type = request.form.get("service_type")
-    photoreport = request.form.get("options_photoreport") == "on"
-    # 不正 service_type は 0 で返す（安全化）
-    if service_type not in SERVICE_PRICE_TABLE:
-        return render_template("_estimate_fragment.html", price=0)
-    price = calc_estimate(service_type, {"photoreport": photoreport})
+    progress = get_booking_progress()
+    incoming = request.form.to_dict(flat=True)
+    if "options_photoreport" in incoming:
+        incoming["options_photoreport"] = (
+            "on" if request.form.get("options_photoreport") else ""
+        )
+    combined = {**progress, **incoming}
+    cleaned, _ = validate_and_clean(
+        combined,
+        partial=True,
+        fields=["service_type", "options_photoreport"],
+    )
+    store_booking_progress(cleaned)
+    service_type = cleaned.get("service_type")
+    price = 0
+    if service_type in SERVICE_PRICE_TABLE:
+        price = calc_estimate(
+            service_type, {"photoreport": cleaned.get("options_photoreport", False)}
+        )
     return render_template("_estimate_fragment.html", price=price)
 
 @app.route("/book", methods=["POST"])
 def book():
-    data, errors = validate_and_clean(request.form)
+    payload = request.form.to_dict(flat=True)
+    if "options_photoreport" not in payload:
+        payload["options_photoreport"] = ""
+    data, errors = validate_and_clean(payload)
     if errors:
-        # 入力値を保持したまま、その場で再描画（400を返すとブラウザもエラー扱いするが問題なし）
-        price = calc_estimate(
-            data["service_type"], {"photoreport": data["options_photoreport"]}
-        ) if data["service_type"] in SERVICE_PRICE_TABLE else 0
-        return render_template(
-            "booking_form.html",
-            service_price_table=SERVICE_PRICE_TABLE,
-            photo_option_price=OPTION_PRICE["photoreport"],
-            form_data=data,
-            errors=errors,
-            price=price,
-        ), 400
+        store_booking_progress(data)
+        set_current_step("confirm")
+        html = render_step_template("confirm", data, errors)
+        response = make_response(html, 400)
+        return response
 
     # ここからは保存（サーバ側で価格を再計算）
     preferred_date = (
@@ -222,7 +411,20 @@ def book():
     )
     db.session.add(b)
     db.session.commit()
-    return render_template("thanks.html", booking=b)
+    clear_booking_progress()
+
+    if request.headers.get("HX-Request"):
+        response = make_response("", 204)
+        response.headers["HX-Redirect"] = url_for("booking_thanks", booking_id=b.id)
+        return response
+
+    return redirect(url_for("booking_thanks", booking_id=b.id))
+
+
+@app.route("/thanks/<int:booking_id>")
+def booking_thanks(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    return render_template("thanks.html", booking=booking)
 
 
 # ---------- Admin ----------
